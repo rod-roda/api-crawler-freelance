@@ -54,16 +54,8 @@ def format_description(description: str):
         return texto[:primeiro_ponto+1]
     return (texto[:limite] + "...") if len(texto) > limite else texto
 
-KEY = "sk_live_7d8f2e1a0b934c3c9f67a4b2d8d5f11e"
-
-router = APIRouter(prefix="/freelance", tags=["freelance"])
-@router.get('/', status_code=status.HTTP_200_OK)
-def get_freelance(request: Request):
-    auth = request.headers.get('Authorization')
-    if auth != f'Bearer {KEY}':
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    URL = "https://www.workana.com/jobs?category=it-programming&language=pt&subcategory=web-development"
+def call_api(category = 'it-programming', subcategory = 'web-development'):
+    URL = f"https://www.workana.com/jobs?category={category}&language=pt{f'&subcategory={subcategory}' if subcategory != None else ''}"
 
     HEADERS = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " "AppleWebKit/537.36 (KHTML, like Gecko) " "Chrome/127.0.0.0 Safari/537.36"),
@@ -80,6 +72,8 @@ def get_freelance(request: Request):
     if(resp.status_code == 200):
         data = resp.json()
         resultados = data['results']['results']
+
+        if(len(resultados) == 0): return {'status': False, 'msg': 'Sem freelances disponíveis'}
 
         response = []
 
@@ -98,21 +92,137 @@ def get_freelance(request: Request):
             resp_resultado['descricao'] = format_description(resultado['description'])
             
             response.append(resp_resultado)
-        return JSONResponse(content={'status': True, 'freelances': response})
+        return {'status': True, 'freelances': response}
     else:   
-        raise HTTPException(status_code=500, detail='Erro ao realizar a requisição')
+        return {'status': False, 'msg': 'Erro ao realizar a requisição'}
 
+KEY = "sk_live_7d8f2e1a0b934c3c9f67a4b2d8d5f11e"
+CATEGORY_SUBCATEGORY = {
+    'it-programming': (
+        'web-development',
+        'web-design',
+        'e-commerce',
+        'wordpress-1',
+        'mobile-development',
+        'data-science-1',
+        'desktop-apps',
+        'artificial-intelligence-1',
+        'others-5'
+    ),
+    'design-multimedia': (
+        'logo-design',
+        'web-design-1',
+        'banners',
+        'illustrations',
+        'make-or-edit-a-video',
+        'infographics',
+        'images-for-social-networks',
+        'mobile-app-design',
+        'corporate-image',
+        '3d-models',
+        'landing-page',
+        'fashion-design-1',
+        'artificial-intelligence-2',
+        'others-1'
+    ), 
+    'writing-translation': (
+        'article-writing-1',
+        'writing-for-websites',
+        'proofreading-1',
+        'content-for-social-networks',
+        'translation',
+        'subtitling-1',
+        'artificial-intelligence-7',
+        'others-6'
+    ), 
+    'sales-marketing': (
+        'seo',
+        'community-management',
+        'advertising-on-google-facebook',
+        'e-mail-marketing',
+        'data-analytics',
+        'televentas',
+        'sales-executive',
+        'artificial-intelligence-6',
+        'others'
+    ),
+    'admin-support': (
+        'virtual-assistant-1',
+        'customer-support',
+        'data-entry-1',
+        'market-research-1',
+        'telesales',
+        'artificial-intelligence-3',
+        'others-2'
+    ), 
+    'legal': (), 
+    'finance-management': (
+        'gather-data',
+        'work-with-a-crm',
+        'project-management-1',
+        'recruiting',
+        'strategic-planning-1',
+        'accounting-1',
+        'artificial-intelligence-5',
+        'others-4'
+    ), 
+    'engineering-manufacturing': (
+        'industrial-design-1',
+        'cad-drawing',
+        '3d-modelling-1',
+        'interior-design-1',
+        'artificial-intelligence-4',
+        'others-3'
+    )
+}
 
-# {
-#   "id": "desenvolvedor-front-end-para-dashboard-de-analytics-de-videos",
-#   "title": "Desenvolvedor Front-End para Dashboard de Analytics de Vídeos",
-#   "url": "https://www.workana.com/job/desenvolvedor-front-end-para-dashboard-de-analytics-de-videos",
-#   "client_name": "P. H.",
-#   "location": "Brasil",
-#   "budget": { "currency": "USD", "min": 1000, "max": 3000 },
-#   "is_hourly": false,
-#   "posted_at": "2025-09-10T??:??:00-03:00",
-#   "proposals_count": 22,
-#   "skills": ["HTML","CSS","JavaScript","Responsive Web Design","Aptidão de programação"],
-#   "short_description": "Buscamos dev front-end para replicar um dashboard de analytics de vídeos, com gráficos interativos, filtros por período, layout responsivo e exportação básica..."
-# }
+router = APIRouter(prefix="/freelance", tags=["freelance"])
+@router.get('/', status_code=status.HTTP_200_OK)
+def get_freelance(request: Request):
+    auth = request.headers.get('Authorization')
+    if auth != f'Bearer {KEY}':
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    ret = call_api()
+    if(ret['status']):
+        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
+    
+    raise HTTPException(status_code=500, detail=ret['msg'])
+
+@router.get('/categories', status_code=status.HTTP_200_OK)
+def get_categories(request: Request):
+    auth = request.headers.get('Authorization')
+    if auth != f'Bearer {KEY}':
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    return JSONResponse(content={'status': True, 'categories': CATEGORY_SUBCATEGORY})
+
+@router.get('/search/{category}')
+def get_freelance_category(request: Request, category: str):
+    auth = request.headers.get('Authorization')
+    if auth != f'Bearer {KEY}':
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if category not in CATEGORY_SUBCATEGORY:
+        raise HTTPException(status_code=400, detail="Categoria indisponível")
+    
+    ret = call_api(category, None)
+    if(ret['status']):
+        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
+    
+    raise HTTPException(status_code=500, detail=ret['msg'])
+
+@router.get('/search/{category}/{subcategory}')
+def get_freelance_category_subcategory(request: Request, category: str, subcategory: str):
+    auth = request.headers.get('Authorization')
+    if auth != f'Bearer {KEY}':
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if category not in CATEGORY_SUBCATEGORY:
+        raise HTTPException(status_code=400, detail="Categoria indisponível")
+    if subcategory not in CATEGORY_SUBCATEGORY[category]:
+        raise HTTPException(status_code=400, detail="Subcategoria indisponível")
+    
+    ret = call_api(category, subcategory)
+    if(ret['status']):
+        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
+    
+    raise HTTPException(status_code=500, detail=ret['msg'])
