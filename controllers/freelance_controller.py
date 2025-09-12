@@ -1,7 +1,8 @@
 import requests, json, re
 from html import unescape
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse
+from typing import Optional
 
 def json_to_file(data: json):
     with open('resposta.json', 'w') as file:
@@ -177,17 +178,31 @@ CATEGORY_SUBCATEGORY = {
 }
 
 router = APIRouter(prefix="/freelance", tags=["freelance"])
-@router.get('/', status_code=status.HTTP_200_OK)
-def get_freelance(request: Request):
-    auth = request.headers.get('Authorization')
-    if auth != f'Bearer {KEY}':
+@router.get("/", status_code=status.HTTP_200_OK)
+def get_freelance(
+    request: Request,
+    category: Optional[str] = Query(None, description="Categoria (opcional)"),
+    subcategory: Optional[str] = Query(None, description="Subcategoria (opcional)")
+):
+    auth = request.headers.get("Authorization")
+    if auth != f"Bearer {KEY}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    ret = call_api()
-    if(ret['status']):
-        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
-    
-    raise HTTPException(status_code=500, detail=ret['msg'])
+    if category and category not in CATEGORY_SUBCATEGORY:
+        raise HTTPException(status_code=400, detail="Categoria indisponível")
+
+    if subcategory and not category:
+        raise HTTPException(status_code=400, detail="Informe 'category' quando usar 'subcategory'")
+
+    if subcategory and subcategory not in CATEGORY_SUBCATEGORY[category]:
+        raise HTTPException(status_code=400, detail="Subcategoria indisponível")
+
+    ret = call_api(category, subcategory) if category else call_api()
+
+    if ret.get("status"):
+        return JSONResponse(content={"status": True, "freelances": ret["freelances"]})
+
+    raise HTTPException(status_code=500, detail=ret.get("msg", "Erro interno"))
 
 @router.get('/categories', status_code=status.HTTP_200_OK)
 def get_categories(request: Request):
@@ -196,33 +211,3 @@ def get_categories(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     return JSONResponse(content={'status': True, 'categories': CATEGORY_SUBCATEGORY})
-
-@router.get('/search/{category}')
-def get_freelance_category(request: Request, category: str):
-    auth = request.headers.get('Authorization')
-    if auth != f'Bearer {KEY}':
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    if category not in CATEGORY_SUBCATEGORY:
-        raise HTTPException(status_code=400, detail="Categoria indisponível")
-    
-    ret = call_api(category, None)
-    if(ret['status']):
-        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
-    
-    raise HTTPException(status_code=500, detail=ret['msg'])
-
-@router.get('/search/{category}/{subcategory}')
-def get_freelance_category_subcategory(request: Request, category: str, subcategory: str):
-    auth = request.headers.get('Authorization')
-    if auth != f'Bearer {KEY}':
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    if category not in CATEGORY_SUBCATEGORY:
-        raise HTTPException(status_code=400, detail="Categoria indisponível")
-    if subcategory not in CATEGORY_SUBCATEGORY[category]:
-        raise HTTPException(status_code=400, detail="Subcategoria indisponível")
-    
-    ret = call_api(category, subcategory)
-    if(ret['status']):
-        return JSONResponse(content={'status': True, 'freelances': ret['freelances']})
-    
-    raise HTTPException(status_code=500, detail=ret['msg'])
