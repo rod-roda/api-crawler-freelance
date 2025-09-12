@@ -188,6 +188,9 @@ def get_freelance(
     if auth != f"Bearer {KEY}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    if subcategory == "":
+        subcategory = None
+
     if category and category not in CATEGORY_SUBCATEGORY:
         raise HTTPException(status_code=400, detail="Categoria indisponível")
 
