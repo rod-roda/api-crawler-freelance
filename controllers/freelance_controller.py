@@ -1,8 +1,13 @@
-import requests, json, re
+import requests, json, re, io, base64
 from html import unescape
 from fastapi import APIRouter, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate
+from reportlab.lib import colors
 
 def json_to_file(data: json):
     with open('resposta.json', 'w') as file:
@@ -32,7 +37,7 @@ def format_budget(budget: str):
         min_val = max_val = None
 
     return {
-        "currency": currency,
+        "moeda": currency,
         "min": min_val,
         "max": max_val
     }
@@ -82,7 +87,7 @@ def call_api(category = 'it-programming', subcategory = 'web-development'):
             resp_resultado = {}
             resp_resultado['id'] = resultado['slug']
             resp_resultado['titulo'] = format_title(resultado['slug'])
-            resp_resultado['url'] = f'https://www.workana.com/job/{resultado['slug']}'
+            resp_resultado['url'] = f"https://www.workana.com/job/{resultado['slug']}"
             resp_resultado['nome_cliente'] = resultado['authorName']
             resp_resultado['localizacao'] = format_country(resultado['country'])
             resp_resultado['orcamento'] = format_budget(resultado['budget'])
@@ -96,6 +101,43 @@ def call_api(category = 'it-programming', subcategory = 'web-development'):
         return {'status': True, 'freelances': response}
     else:   
         return {'status': False, 'msg': 'Erro ao realizar a requisição'}
+    
+def generate_pdf(data: list):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    
+    topic_style = ParagraphStyle(
+        'TopicStyle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',  # negrito
+        fontSize=14,                 # fonte maior
+        leading=18,                  # espaço entre linhas
+        alignment=0,                 # 0 = LEFT
+        textTransform='uppercase',   # capslock
+        spaceAfter=10                # espaço após o parágrafo
+    )
+    
+    story = []
+
+    for item in data:
+        story.append(Paragraph(f"{item['titulo']}", topic_style))
+        story.append(Paragraph(f"Cliente: {item['nome_cliente']}", styles["Normal"]))
+        story.append(Paragraph(f"Localização: {item['localizacao']}", styles["Normal"]))
+        story.append(Paragraph(
+            f"Orçamento: {item['orcamento']['min']} - {item['orcamento']['max']} {item['orcamento']['moeda']}",
+            styles["Normal"]
+        ))
+        story.append(Paragraph(f"Pagamento por hora: {'Sim' if item['pagamento_por_hora'] else 'Não'}", styles["Normal"]))
+        story.append(Paragraph(f"Postado em: {item['postado_em']}", styles["Normal"]))
+        story.append(Paragraph(f"Quantidade de propostas: {item['qtd_propostas']}", styles["Normal"]))
+        story.append(Paragraph(f"Habilidades: {', '.join(item['habilidades'])}", styles["Normal"]))
+        story.append(Paragraph(f"Descrição: {item['descricao']}", styles["Normal"]))
+        story.append(Paragraph(f"URL: {item['url']}<br/><br/>", styles["Normal"]))
+
+    doc.build(story)
+    pdf_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    return pdf_base64
 
 KEY = "sk_live_7d8f2e1a0b934c3c9f67a4b2d8d5f11e"
 CATEGORY_SUBCATEGORY = {
@@ -201,9 +243,10 @@ def get_freelance(
         raise HTTPException(status_code=400, detail="Subcategoria indisponível")
 
     ret = call_api(category, subcategory) if category else call_api()
+    pdf_base64 = generate_pdf(ret['freelances']) if ret.get("status") else None
 
     if ret.get("status"):
-        return JSONResponse(content={"status": True, "freelances": ret["freelances"]})
+        return JSONResponse(content={"status": True, "freelances": ret["freelances"], "pdf": pdf_base64})
 
     raise HTTPException(status_code=500, detail=ret.get("msg", "Erro interno"))
 
