@@ -1,4 +1,4 @@
-import requests, json, re, io, base64
+import requests, json, re, io, base64, os
 from html import unescape
 from fastapi import APIRouter, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse
@@ -8,6 +8,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import Paragraph, SimpleDocTemplate
 from reportlab.lib import colors
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def json_to_file(data: json):
     with open('resposta.json', 'w') as file:
@@ -139,7 +142,7 @@ def generate_pdf(data: list):
     pdf_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return pdf_base64
 
-KEY = "sk_live_7d8f2e1a0b934c3c9f67a4b2d8d5f11e"
+KEY = os.getenv("API_KEY")
 CATEGORY_SUBCATEGORY = {
     'it-programming': (
         'web-development',
